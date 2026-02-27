@@ -63,6 +63,7 @@
         .left-panel {
             flex-shrink: 0;
             overflow-y: auto;
+            padding-bottom: 80px;
         }
         
         .right-panel {
@@ -126,7 +127,13 @@
             background: #28a745;
             width: 100%;
             margin-top: 12px;
-            padding: 10px;
+            padding: 12px;
+            font-size: 16px;
+            font-weight: bold;
+            position: sticky;
+            bottom: 0;
+            z-index: 100;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
         }
         
         .btn-send:hover {
@@ -285,10 +292,53 @@
         @media (max-width: 900px) {
             .main-content {
                 grid-template-columns: 1fr;
+                min-height: auto;
+            }
+            
+            .container {
+                height: auto;
+                min-height: 100vh;
+            }
+            
+            .left-panel {
+                min-height: auto;
+                max-height: 60vh;
+                overflow-y: auto;
+                position: relative;
+                padding-bottom: 80px;
+            }
+            
+            .right-panel {
+                min-height: 300px;
+                position: sticky;
+                top: 0;
             }
             
             .form-section {
                 max-height: none;
+            }
+            
+            .btn-send {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                width: 100%;
+                border-radius: 0;
+                z-index: 1000;
+                padding: 15px;
+            }
+            
+            .renglon-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+            
+            .renglon-grid .form-group:first-child {
+                grid-column: 1 / -1;
+            }
+            
+            body {
+                padding: 10px;
             }
         }
         
@@ -1039,8 +1089,17 @@
                         let value = text;
                         
                         if (field === 'tipoComprobante') {
-                            const match = text.match(/[ABCEM]/i);
-                            if (match) value = match[0].toUpperCase();
+                            const match = text.match(/\b([ABCEM])\b/i);
+                            if (match) {
+                                value = match[1].toUpperCase();
+                            } else {
+                                const textLower = text.toLowerCase();
+                                if (textLower.includes('a') || textLower.includes('responsable inscripto')) value = 'A';
+                                else if (textLower.includes('b') || textLower.includes('consumidor final')) value = 'B';
+                                else if (textLower.includes('c') || textLower.includes('monotribut') || textLower.includes('responsable monotribut')) value = 'C';
+                                else if (textLower.includes('e') || textLower.includes('export')) value = 'E';
+                                else if (textLower.includes('m')) value = 'M';
+                            }
                         } else if (field === 'puntoVenta') {
                             const match = text.match(/(\d{4,5})/);
                             if (match) value = match[1].padStart(4, '0');
@@ -1271,10 +1330,22 @@
             const fullText = text;
             
             const tipoComprobantePatterns = [
-                /(?:factura|tipo|comprobante)\s*[:\-]?\s*([A-Z])/i,
-                /\b(Factura\s+[A-Z])\b/i,
-                /\b([A-Z])\s*[-–]\s*\d{4,}/i
+                /\bfactura\s+[a-z]*\s*([A-Z])\b/i,
+                /\btipo\s*de\s*comprobante\s*[:\-]?\s*([A-Z])/i,
+                /\b([A-Z])\s*[-–]\s*\d{4,}/i,
+                /\bcomprobante\s+([A-Z])\b/i,
+                /factura\s+([A-Z])/i,
+                /\b(FA|FA[A-Z]?|FB|FC|FE|FM)\b/i,
+                /\b([A-Z]{1})\s*[-–]\s*\d{4,}/i
             ];
+            
+            const tipoComprobanteKeywords = {
+                'A': ['factura a', 'fa ', 'factura tipo a', 'responsable inscripto'],
+                'B': ['factura b', 'fb ', 'factura tipo b', 'consumidor final'],
+                'C': ['factura c', 'fc ', 'factura tipo c', 'monotributo', 'responsable monotributo', 'responsable monotributista'],
+                'E': ['factura e', 'fe ', 'factura tipo e', 'exportacion', 'exportación'],
+                'M': ['factura m', 'fm ', 'factura tipo m']
+            };
             
             const puntoVentaPatterns = [
                 /punto\s*de\s*venta\s*[:\-]?\s*(\d{4,5})/i,
@@ -1361,14 +1432,22 @@
                             document.getElementById('tipoComprobante').value = value;
                             break;
                         }
-                        const typeMatch = value.match(/FACTURA\s+([A-Z])/i);
-                        if (typeMatch) {
-                            document.getElementById('tipoComprobante').value = typeMatch[1].toUpperCase();
-                            break;
-                        }
                     }
                 }
                 if (document.getElementById('tipoComprobante').value) break;
+            }
+            
+            if (!document.getElementById('tipoComprobante').value) {
+                const textLower = fullText.toLowerCase();
+                for (const [tipo, keywords] of Object.entries(tipoComprobanteKeywords)) {
+                    for (const keyword of keywords) {
+                        if (textLower.includes(keyword)) {
+                            document.getElementById('tipoComprobante').value = tipo;
+                            break;
+                        }
+                    }
+                    if (document.getElementById('tipoComprobante').value) break;
+                }
             }
             
             for (const pattern of puntoVentaPatterns) {
@@ -1602,30 +1681,16 @@
                 renglones: renglones
             };
             
+            alert('JSON a enviar:\n\n' + JSON.stringify(data, null, 2));
+            
             const btn = document.getElementById('sendBtn');
             btn.disabled = true;
-            btn.innerHTML = '<span class="spinner"></span>Enviando...';
+            btn.innerHTML = '✓ Enviado';
             
-            try {
-                const response = await fetch('URL_DE_TU_API_AQUI', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(data)
-                });
-                
-                if (response.ok) {
-                    showStatus('Datos enviados correctamente', 'success');
-                } else {
-                    showStatus('Error al enviar los datos', 'error');
-                }
-            } catch (error) {
-                showStatus('Error de conexión: ' + error.message, 'error');
-            } finally {
+            setTimeout(() => {
                 btn.disabled = false;
                 btn.textContent = 'Enviar Datos';
-            }
+            }, 2000);
         });
     </script>
 </body>
