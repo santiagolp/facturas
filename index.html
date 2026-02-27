@@ -1,0 +1,1633 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Extractor de Facturas Argentina</title>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        html, body {
+            height: 100%;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 15px;
+        }
+        
+        .container {
+            width: 100%;
+            height: calc(100vh - 30px);
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            display: flex;
+            flex-direction: column;
+        }
+        
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 15px;
+            font-size: 24px;
+            flex-shrink: 0;
+        }
+        
+        .main-content {
+            display: grid;
+            grid-template-columns: 500px 1fr;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+        }
+        
+        .left-panel, .right-panel {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .left-panel {
+            flex-shrink: 0;
+            overflow-y: auto;
+        }
+        
+        .right-panel {
+            min-height: 500px;
+        }
+        
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            flex: 0 0 auto;
+        }
+        
+        .upload-area:hover {
+            background: #f0f0ff;
+            border-color: #764ba2;
+        }
+        
+        .upload-area.dragover {
+            background: #e0e0ff;
+            border-color: #764ba2;
+        }
+        
+        .upload-icon {
+            font-size: 32px;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+            margin-bottom: 10px;
+        }
+        
+        #fileInput {
+            display: none;
+        }
+        
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #764ba2;
+            transform: translateY(-2px);
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .btn-send {
+            background: #28a745;
+            width: 100%;
+            margin-top: 12px;
+            padding: 10px;
+        }
+        
+        .btn-send:hover {
+            background: #218838;
+        }
+        
+        .preview {
+            flex: 1;
+            margin-top: 10px;
+            text-align: center;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            background: white;
+            border-radius: 8px;
+            padding: 10px;
+            overflow: auto;
+            min-height: 100%;
+        }
+        
+        .preview img {
+            max-width: 100%;
+            border-radius: 8px;
+            object-fit: contain;
+        }
+        
+        .preview-placeholder {
+            color: #999;
+            font-size: 16px;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+            display: none;
+        }
+        
+        .status.loading {
+            display: block;
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .status.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .form-section {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 8px;
+            min-height: 0;
+            margin-top: 10px;
+        }
+        
+        .form-section::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .form-section::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .form-section::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+        
+        .form-section {
+            flex: 1;
+            overflow-y: auto;
+            padding-right: 8px;
+            min-height: 0;
+            margin-top: 10px;
+        }
+        
+        .form-section::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .form-section::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+        
+        .form-group {
+            margin-bottom: 8px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: 600;
+            font-size: 13px;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 18px;
+            height: 18px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .file-info {
+            text-align: center;
+            color: #666;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .section-title {
+            color: #333;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 5px;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .form-section {
+                max-height: none;
+            }
+        }
+        
+        .btn-select {
+            background: #17a2b8;
+            padding: 4px 8px;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+        
+        .btn-select:hover {
+            background: #138496;
+        }
+        
+        .btn-select.active {
+            background: #ffc107;
+            color: #333;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+            50% { box-shadow: 0 0 0 6px rgba(255, 193, 7, 0); }
+        }
+        
+        .input-with-btn {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        
+        .input-with-btn input,
+        .input-with-btn select {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .form-group {
+            margin-bottom: 12px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 3px;
+            color: #555;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        
+        .form-group input, .form-group select {
+            width: 100%;
+            padding: 8px 10px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-size: 13px;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus, .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .form-group .input-with-btn {
+            margin-top: 5px;
+        }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        .canvas-container img {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+        }
+        
+        #selectionCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: crosshair;
+        }
+        
+        .region-box {
+            position: absolute;
+            border: 2px solid;
+            pointer-events: none;
+        }
+        
+        .region-label {
+            position: absolute;
+            top: -20px;
+            left: 0;
+            background: inherit;
+            color: white;
+            padding: 2px 6px;
+            font-size: 10px;
+            border-radius: 3px;
+            white-space: nowrap;
+        }
+        
+        .instructions {
+            background: #e7f3ff;
+            border: 1px solid #b3d7ff;
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 10px;
+            font-size: 11px;
+            color: #004085;
+        }
+        
+        .instructions strong {
+            color: #0056b3;
+        }
+        
+        .renglon-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            padding: 10px;
+            margin-bottom: 8px;
+        }
+        
+        .renglon-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+            padding-bottom: 5px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .renglon-title {
+            font-weight: 600;
+            font-size: 12px;
+            color: #333;
+        }
+        
+        .renglon-delete {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 3px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        
+        .renglon-delete:hover {
+            background: #c82333;
+        }
+        
+        .renglon-grid {
+            display: grid;
+            grid-template-columns: 60px 1fr 80px 70px 90px;
+            gap: 6px;
+        }
+        
+        .renglon-grid .form-group {
+            margin-bottom: 0;
+        }
+        
+        .renglon-grid input {
+            padding: 6px 8px;
+            font-size: 12px;
+        }
+        
+        .renglon-grid label {
+            font-size: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Extractor de Facturas Argentina</h1>
+        
+        <div class="main-content">
+            <div class="left-panel">
+                <div class="upload-area" id="uploadArea">
+                    <div class="upload-icon">📄</div>
+                    <p>Arrastra una imagen o PDF aquí</p>
+                    <p style="color: #999; font-size: 14px; margin-top: 5px;">o haz clic para seleccionar</p>
+                    <input type="file" id="fileInput" accept="image/*,.pdf">
+                </div>
+                
+                <div class="file-info" id="fileInfo"></div>
+                
+                <div style="display: flex; gap: 10px; margin-top: 10px;">
+                    <button type="button" class="btn" id="clearRegionsBtn" style="flex: 1; background: #dc3545;">🗑️ Limpiar Regiones</button>
+                    <button type="button" class="btn" id="extractBtn" style="flex: 1;">🔄 Re-Extraer Datos</button>
+                </div>
+                
+                <div class="status" id="status"></div>
+                
+                <div class="form-section">
+                    <div class="instructions">
+                        <strong>Instrucciones:</strong> Haz clic en el botón <strong>"📍"</strong> junto a cada campo, luego dibuja un rectángulo en la imagen donde está ese dato.
+                    </div>
+                    
+                    <h3 class="section-title">Datos del Comprobante</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="tipoComprobante">Tipo Comprobante</label>
+                            <div class="input-with-btn">
+                                <select id="tipoComprobante">
+                                    <option value="">Seleccionar...</option>
+                                    <option value="A">Factura A</option>
+                                    <option value="B">Factura B</option>
+                                    <option value="C">Factura C</option>
+                                    <option value="E">Factura E (Exportación)</option>
+                                    <option value="M">Factura M</option>
+                                </select>
+                                <button type="button" class="btn btn-select" data-field="tipoComprobante" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="puntoVenta">Punto de Venta</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="puntoVenta" placeholder="Ej: 0001">
+                                <button type="button" class="btn btn-select" data-field="puntoVenta" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="numeroComprobante">Número Comprobante</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="numeroComprobante" placeholder="Ej: 00001234">
+                                <button type="button" class="btn btn-select" data-field="numeroComprobante" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="cae">CAE (Código de Autorización)</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="cae" placeholder="14 dígitos">
+                                <button type="button" class="btn btn-select" data-field="cae" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="fecha">Fecha Emisión</label>
+                            <div class="input-with-btn">
+                                <input type="date" id="fecha">
+                                <button type="button" class="btn btn-select" data-field="fecha" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="fechaVencimiento">Fecha Vencimiento</label>
+                            <div class="input-with-btn">
+                                <input type="date" id="fechaVencimiento">
+                                <button type="button" class="btn btn-select" data-field="fechaVencimiento" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="section-title" style="margin-top: 12px;">Datos del Proveedor</h3>
+                    
+                    <div class="form-group">
+                        <label for="proveedor">Razón Social / Proveedor</label>
+                        <div class="input-with-btn">
+                            <input type="text" id="proveedor" placeholder="Nombre del proveedor">
+                            <button type="button" class="btn btn-select" data-field="proveedor" title="Seleccionar área en la imagen">📍</button>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="cuitEmisor">CUIT Emisor</label>
+                            <div class="input-with-btn">
+                                <input type="text" id="cuitEmisor" placeholder="Ej: 30-12345678-9">
+                                <button type="button" class="btn btn-select" data-field="cuitEmisor" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="condicionIva">Condición IVA</label>
+                            <select id="condicionIva">
+                                <option value="">Seleccionar...</option>
+                                <option value="Responsable Inscripto">Responsable Inscripto</option>
+                                <option value="Monotributista">Monotributista</option>
+                                <option value="Consumidor Final">Consumidor Final</option>
+                                <option value="Exento">Exento</option>
+                                <option value="No Responsable">No Responsable</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="direccion">Dirección</label>
+                        <div class="input-with-btn">
+                            <input type="text" id="direccion" placeholder="Dirección del proveedor">
+                            <button type="button" class="btn btn-select" data-field="direccion" title="Seleccionar área en la imagen">📍</button>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cuitReceptor">CUIT Receptor (Opcional)</label>
+                        <div class="input-with-btn">
+                            <input type="text" id="cuitReceptor" placeholder="Ej: 20-12345678-9">
+                            <button type="button" class="btn btn-select" data-field="cuitReceptor" title="Seleccionar área en la imagen">📍</button>
+                        </div>
+                    </div>
+                    
+                    <h3 class="section-title" style="margin-top: 12px;">Montos</h3>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="subtotal">Subtotal</label>
+                            <div class="input-with-btn">
+                                <input type="number" id="subtotal" step="0.01" placeholder="0.00">
+                                <button type="button" class="btn btn-select" data-field="subtotal" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="iva">IVA</label>
+                            <div class="input-with-btn">
+                                <input type="number" id="iva" step="0.01" placeholder="0.00">
+                                <button type="button" class="btn btn-select" data-field="iva" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                        <div class="form-group">
+                            <label for="iibb">IIBB (Ingresos Brutos)</label>
+                            <div class="input-with-btn">
+                                <input type="number" id="iibb" step="0.01" placeholder="0.00">
+                                <button type="button" class="btn btn-select" data-field="iibb" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="total">Total</label>
+                            <div class="input-with-btn">
+                                <input type="number" id="total" step="0.01" placeholder="0.00">
+                                <button type="button" class="btn btn-select" data-field="total" title="Seleccionar área en la imagen">📍</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <h3 class="section-title" style="margin-top: 12px;">Detalles / Renglones</h3>
+                    
+                    <button type="button" class="btn btn-select" data-field="renglones" style="width: 100%; margin-bottom: 8px; background: #e91e63;" title="Seleccionar área de renglón en la imagen">📍 Extraer Renglón de Imagen</button>
+                    
+                    <div id="renglonesContainer"></div>
+                    
+                    <button type="button" class="btn" id="addRenglonBtn" style="width: 100%; margin-top: 8px; background: #6c757d;">+ Agregar Renglón</button>
+                    
+                    <button class="btn btn-send" id="sendBtn">Enviar Datos</button>
+                </div>
+            </div>
+            
+            <div class="right-panel">
+                <div class="preview" id="preview">
+                    <span class="preview-placeholder">Vista previa de la factura</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const preview = document.getElementById('preview');
+        const status = document.getElementById('status');
+        const fileInfo = document.getElementById('fileInfo');
+        
+        let currentImageData = null;
+        let currentImageElement = null;
+        let regions = {};
+        let activeField = null;
+        let renglonCount = 0;
+        
+        function createRenglonHTML(index) {
+            return `
+                <div class="renglon-card" id="renglon-${index}">
+                    <div class="renglon-header">
+                        <span class="renglon-title">Renglón ${index + 1}</span>
+                        <button type="button" class="renglon-delete" onclick="deleteRenglon(${index})">✕</button>
+                    </div>
+                    <div class="renglon-grid">
+                        <div class="form-group">
+                            <label>Cant.</label>
+                            <input type="number" class="renglon-cantidad" step="0.01" placeholder="1" value="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Descripción</label>
+                            <input type="text" class="renglon-descripcion" placeholder="Producto/Servicio">
+                        </div>
+                        <div class="form-group">
+                            <label>Precio Unit.</label>
+                            <input type="number" class="renglon-precio" step="0.01" placeholder="0.00">
+                        </div>
+                        <div class="form-group">
+                            <label>IVA %</label>
+                            <input type="number" class="renglon-iva" step="0.01" placeholder="21">
+                        </div>
+                        <div class="form-group">
+                            <label>Importe</label>
+                            <input type="number" class="renglon-importe" step="0.01" placeholder="0.00" readonly style="background: #f8f9fa;">
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function addRenglon() {
+            const container = document.getElementById('renglonesContainer');
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = createRenglonHTML(renglonCount);
+            container.appendChild(tempDiv.firstElementChild);
+            
+            const renglon = document.getElementById(`renglon-${renglonCount}`);
+            const cantidadInput = renglon.querySelector('.renglon-cantidad');
+            const precioInput = renglon.querySelector('.renglon-precio');
+            const importeInput = renglon.querySelector('.renglon-importe');
+            
+            const calculateImporte = () => {
+                const cantidad = parseFloat(cantidadInput.value) || 0;
+                const precio = parseFloat(precioInput.value) || 0;
+                importeInput.value = (cantidad * precio).toFixed(2);
+            };
+            
+            cantidadInput.addEventListener('input', calculateImporte);
+            precioInput.addEventListener('input', calculateImporte);
+            
+            renglonCount++;
+        }
+        
+        function deleteRenglon(index) {
+            const renglon = document.getElementById(`renglon-${index}`);
+            if (renglon) {
+                renglon.remove();
+                updateRenglonNumbers();
+            }
+        }
+        
+        function updateRenglonNumbers() {
+            const renglones = document.querySelectorAll('.renglon-card');
+            renglones.forEach((renglon, idx) => {
+                renglon.querySelector('.renglon-title').textContent = `Renglón ${idx + 1}`;
+            });
+        }
+        
+        document.getElementById('addRenglonBtn').addEventListener('click', addRenglon);
+        let isDrawing = false;
+        let startX, startY;
+        
+        const fieldColors = {
+            tipoComprobante: '#e74c3c',
+            puntoVenta: '#3498db',
+            numeroComprobante: '#9b59b6',
+            cae: '#1abc9c',
+            fecha: '#f39c12',
+            fechaVencimiento: '#e67e22',
+            proveedor: '#2ecc71',
+            cuitEmisor: '#34495e',
+            direccion: '#16a085',
+            cuitReceptor: '#8e44ad',
+            subtotal: '#c0392b',
+            iva: '#d35400',
+            iibb: '#7f8c8d',
+            total: '#27ae60',
+            renglones: '#e91e63'
+        };
+        
+        const fieldLabels = {
+            tipoComprobante: 'Tipo',
+            puntoVenta: 'Pto Vta',
+            numeroComprobante: 'Nro',
+            cae: 'CAE',
+            fecha: 'Fecha',
+            fechaVencimiento: 'Venc',
+            proveedor: 'Proveedor',
+            cuitEmisor: 'CUIT',
+            direccion: 'Dirección',
+            cuitReceptor: 'CUIT Rec',
+            subtotal: 'Subtotal',
+            iva: 'IVA',
+            iibb: 'IIBB',
+            total: 'Total',
+            renglones: 'Renglón'
+        };
+        
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        document.querySelectorAll('.btn-select').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const field = this.getAttribute('data-field');
+                toggleFieldSelection(field, this);
+            });
+        });
+        
+        document.getElementById('clearRegionsBtn').addEventListener('click', () => {
+            regions = {};
+            if (document.getElementById('selectionCanvas')) {
+                drawRegions();
+            }
+            showStatus('Regiones limpiadas', 'success');
+            setTimeout(() => {
+                const statusEl = document.getElementById('status');
+                if (statusEl) statusEl.style.display = 'none';
+            }, 2000);
+        });
+        
+        document.getElementById('extractBtn').addEventListener('click', () => {
+            if (currentImageData) {
+                extractText(currentImageData);
+            }
+        });
+        
+        window.addEventListener('resize', () => {
+            if (currentImageData && document.getElementById('selectionCanvas')) {
+                setTimeout(drawRegions, 100);
+            }
+        });
+        
+        function toggleFieldSelection(field, btn) {
+            if (activeField === field) {
+                activeField = null;
+                btn.classList.remove('active');
+            } else {
+                document.querySelectorAll('.btn-select').forEach(b => b.classList.remove('active'));
+                activeField = field;
+                btn.classList.add('active');
+            }
+        }
+        
+        async function handleFile(file) {
+            if (!file.type.match('image.*') && file.type !== 'application/pdf') {
+                showStatus('Por favor selecciona una imagen o PDF válido', 'error');
+                return;
+            }
+            
+            fileInfo.textContent = `Archivo: ${file.name}`;
+            
+            if (file.type === 'application/pdf') {
+                await processPDF(file);
+            } else {
+                await processImage(file);
+            }
+        }
+        
+        async function processImage(file) {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                currentImageData = e.target.result;
+                renderPreview();
+            };
+            reader.readAsDataURL(file);
+        }
+        
+        async function processPDF(file) {
+            showStatus('Convirtiendo PDF a imagen...', 'loading');
+            
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            const page = await pdf.getPage(1);
+            const viewport = page.getViewport({ scale: 2 });
+            
+            canvas.height = viewport.height;
+            canvas.width = viewport.width;
+            
+            await page.render({ canvasContext: ctx, viewport: viewport }).promise;
+            
+            currentImageData = canvas.toDataURL('image/png');
+            renderPreview();
+        }
+        
+        function renderPreview() {
+            preview.innerHTML = `
+                <div class="canvas-container" id="canvasContainer">
+                    <img id="previewImage" src="${currentImageData}" alt="Vista previa">
+                    <canvas id="selectionCanvas"></canvas>
+                </div>
+            `;
+            
+            currentImageElement = document.getElementById('previewImage');
+            const canvas = document.getElementById('selectionCanvas');
+            const container = document.getElementById('canvasContainer');
+            
+            currentImageElement.onload = () => {
+                canvas.width = currentImageElement.clientWidth;
+                canvas.height = currentImageElement.clientHeight;
+                drawRegions();
+            };
+            
+            if (currentImageElement.complete) {
+                canvas.width = currentImageElement.clientWidth;
+                canvas.height = currentImageElement.clientHeight;
+                drawRegions();
+            }
+            
+            canvas.addEventListener('mousedown', startSelection);
+            canvas.addEventListener('mousemove', updateSelection);
+            canvas.addEventListener('mouseup', endSelection);
+            canvas.addEventListener('mouseleave', endSelection);
+            
+            extractText(currentImageData);
+        }
+        
+        function startSelection(e) {
+            if (!activeField) return;
+            
+            const rect = e.target.getBoundingClientRect();
+            startX = e.clientX - rect.left;
+            startY = e.clientY - rect.top;
+            isDrawing = true;
+        }
+        
+        function updateSelection(e) {
+            if (!isDrawing || !activeField) return;
+            
+            const canvas = document.getElementById('selectionCanvas');
+            const rect = canvas.getBoundingClientRect();
+            const currentX = e.clientX - rect.left;
+            const currentY = e.clientY - rect.top;
+            
+            drawRegions();
+            
+            const ctx = canvas.getContext('2d');
+            const width = currentX - startX;
+            const height = currentY - startY;
+            
+            ctx.fillStyle = fieldColors[activeField] + '40';
+            ctx.strokeStyle = fieldColors[activeField];
+            ctx.lineWidth = 2;
+            ctx.fillRect(startX, startY, width, height);
+            ctx.strokeRect(startX, startY, width, height);
+        }
+        
+        function endSelection(e) {
+            if (!isDrawing || !activeField) return;
+            
+            const canvas = document.getElementById('selectionCanvas');
+            const rect = canvas.getBoundingClientRect();
+            const endX = e.clientX - rect.left;
+            const endY = e.clientY - rect.top;
+            
+            const x = Math.min(startX, endX);
+            const y = Math.min(startY, endY);
+            const width = Math.abs(endX - startX);
+            const height = Math.abs(endY - startY);
+            
+            if (width > 10 && height > 10) {
+                const imgWidth = currentImageElement.clientWidth;
+                const imgHeight = currentImageElement.clientHeight;
+                
+                regions[activeField] = {
+                    x: x / imgWidth,
+                    y: y / imgHeight,
+                    width: width / imgWidth,
+                    height: height / imgHeight
+                };
+                
+                extractSingleRegion(activeField);
+            }
+            
+            isDrawing = false;
+            document.querySelector(`[data-field="${activeField}"]`).classList.remove('active');
+            activeField = null;
+            
+            drawRegions();
+        }
+        
+        async function extractSingleRegion(field) {
+            const region = regions[field];
+            if (!region || !currentImageData) return;
+            
+            if (field === 'renglones') {
+                await extractRenglonFromRegion(region);
+                return;
+            }
+            
+            const img = new Image();
+            img.src = currentImageData;
+            await new Promise(resolve => img.onload = resolve);
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            const x = Math.round(region.x * img.width);
+            const y = Math.round(region.y * img.height);
+            const w = Math.round(region.width * img.width);
+            const h = Math.round(region.height * img.height);
+            
+            const regionCanvas = document.createElement('canvas');
+            regionCanvas.width = w;
+            regionCanvas.height = h;
+            const regionCtx = regionCanvas.getContext('2d');
+            regionCtx.drawImage(img, x, y, w, h, 0, 0, w, h);
+            
+            const regionDataUrl = regionCanvas.toDataURL('image/png');
+            
+            try {
+                showStatus(`Extrayendo ${fieldLabels[field] || field}...`, 'loading');
+                const result = await Tesseract.recognize(regionDataUrl, 'spa+eng');
+                const text = result.data.text.trim();
+                
+                if (text) {
+                    const input = document.getElementById(field);
+                    if (input) {
+                        let value = text;
+                        
+                        if (field === 'tipoComprobante') {
+                            const match = text.match(/[ABCEM]/i);
+                            if (match) value = match[0].toUpperCase();
+                        } else if (field === 'puntoVenta') {
+                            const match = text.match(/(\d{4,5})/);
+                            if (match) value = match[1].padStart(4, '0');
+                        } else if (field === 'numeroComprobante') {
+                            const match = text.match(/(\d{5,8})/);
+                            if (match) value = match[1];
+                        } else if (field === 'cae') {
+                            const match = text.match(/(\d{14})/);
+                            if (match) value = match[1];
+                        } else if (field === 'fecha' || field === 'fechaVencimiento') {
+                            const match = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+                            if (match) {
+                                const year = match[3].length === 2 ? '20' + match[3] : match[3];
+                                value = `${year}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+                            }
+                        } else if (field === 'cuitEmisor' || field === 'cuitReceptor') {
+                            const cleanCuit = text.replace(/[\s\-\.]/g, '');
+                            if (cleanCuit.length === 11) {
+                                value = `${cleanCuit.slice(0, 2)}-${cleanCuit.slice(2, 10)}-${cleanCuit.slice(10)}`;
+                            } else {
+                                value = text;
+                            }
+                        } else if (['subtotal', 'iva', 'iibb', 'total'].includes(field)) {
+                            const match = text.replace(/[^\d.,]/g, '').match(/[\d,]+\.?\d*/);
+                            if (match) value = parseFloat(match[0].replace(/,/g, '')).toFixed(2);
+                        } else {
+                            value = text.replace(/\n/g, ' ').trim();
+                        }
+                        
+                        input.value = value;
+                        showStatus(`${fieldLabels[field] || field} extraído correctamente`, 'success');
+                    }
+                } else {
+                    showStatus(`No se detectó texto en la región`, 'error');
+                }
+            } catch (error) {
+                showStatus('Error al extraer texto: ' + error.message, 'error');
+            }
+        }
+        
+        async function extractRenglonFromRegion(region) {
+            const img = new Image();
+            img.src = currentImageData;
+            await new Promise(resolve => img.onload = resolve);
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            const x = Math.round(region.x * img.width);
+            const y = Math.round(region.y * img.height);
+            const w = Math.round(region.width * img.width);
+            const h = Math.round(region.height * img.height);
+            
+            const regionCanvas = document.createElement('canvas');
+            regionCanvas.width = w;
+            regionCanvas.height = h;
+            const regionCtx = regionCanvas.getContext('2d');
+            regionCtx.drawImage(img, x, y, w, h, 0, 0, w, h);
+            
+            const regionDataUrl = regionCanvas.toDataURL('image/png');
+            
+            try {
+                showStatus('Extrayendo renglón...', 'loading');
+                const result = await Tesseract.recognize(regionDataUrl, 'spa+eng');
+                const text = result.data.text.trim();
+                
+                if (text) {
+                    const lines = text.split('\n').filter(l => l.trim());
+                    
+                    let cantidad = 1;
+                    let descripcion = '';
+                    let precioUnitario = 0;
+                    let alicuotaIva = 21;
+                    let importe = 0;
+                    
+                    const numberMatches = text.match(/[\d,]+\.?\d*/g);
+                    const words = text.split(/[\s\n]+/);
+                    
+                    for (const word of words.slice(0, 5)) {
+                        const numMatch = word.replace(/,/g, '');
+                        if (/^\d+$/.test(numMatch) && parseInt(numMatch) > 0 && parseInt(numMatch) < 1000 && !cantidad) {
+                            cantidad = parseInt(numMatch);
+                        }
+                    }
+                    
+                    const numbers = text.match(/[\d,]+\.?\d*/g) || [];
+                    const validNumbers = numbers
+                        .map(n => parseFloat(n.replace(/,/g, '')))
+                        .filter(n => !isNaN(n) && n > 0);
+                    
+                    if (validNumbers.length > 0) {
+                        precioUnitario = validNumbers[0];
+                    }
+                    if (validNumbers.length > 1) {
+                        importe = validNumbers[validNumbers.length - 1];
+                    }
+                    
+                    descripcion = text.replace(/[\d,]+\.?\d*/g, '').replace(/\n/g, ' ').trim();
+                    if (descripcion.length > 100) {
+                        descripcion = descripcion.substring(0, 100);
+                    }
+                    
+                    addRenglon();
+                    
+                    const renglones = document.querySelectorAll('.renglon-card');
+                    const ultimoRenglon = renglones[renglones.length - 1];
+                    
+                    if (cantidad > 0) ultimoRenglon.querySelector('.renglon-cantidad').value = cantidad;
+                    if (descripcion) ultimoRenglon.querySelector('.renglon-descripcion').value = descripcion;
+                    if (precioUnitario > 0) ultimoRenglon.querySelector('.renglon-precio').value = precioUnitario.toFixed(2);
+                    ultimoRenglon.querySelector('.renglon-iva').value = alicuotaIva;
+                    if (importe > 0) {
+                        ultimoRenglon.querySelector('.renglon-importe').value = importe.toFixed(2);
+                    } else {
+                        const calcImporte = (parseFloat(ultimoRenglon.querySelector('.renglon-cantidad').value) || 1) * 
+                                           (parseFloat(ultimoRenglon.querySelector('.renglon-precio').value) || 0);
+                        ultimoRenglon.querySelector('.renglon-importe').value = calcImporte.toFixed(2);
+                    }
+                    
+                    showStatus('Renglón agregado correctamente', 'success');
+                } else {
+                    showStatus('No se detectó texto en la región', 'error');
+                }
+            } catch (error) {
+                showStatus('Error al extraer renglón: ' + error.message, 'error');
+            }
+        }
+        
+        function drawRegions() {
+            const canvas = document.getElementById('selectionCanvas');
+            if (!canvas || !currentImageElement) return;
+            
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            const imgWidth = currentImageElement.clientWidth;
+            const imgHeight = currentImageElement.clientHeight;
+            
+            for (const [field, region] of Object.entries(regions)) {
+                const x = region.x * imgWidth;
+                const y = region.y * imgHeight;
+                const width = region.width * imgWidth;
+                const height = region.height * imgHeight;
+                
+                ctx.fillStyle = fieldColors[field] + '30';
+                ctx.strokeStyle = fieldColors[field];
+                ctx.lineWidth = 2;
+                ctx.fillRect(x, y, width, height);
+                ctx.strokeRect(x, y, width, height);
+                
+                ctx.fillStyle = fieldColors[field];
+                ctx.font = 'bold 11px sans-serif';
+                ctx.fillText(fieldLabels[field] || field, x + 4, y + 14);
+            }
+        }
+        
+        async function extractText(imageData) {
+            showStatus('Extrayendo texto de la factura...', 'loading');
+            
+            try {
+                let text;
+                
+                const definedRegions = Object.keys(regions);
+                
+                if (definedRegions.length > 0) {
+                    text = await extractFromRegions(imageData);
+                } else {
+                    const result = await Tesseract.recognize(imageData, 'spa+eng', {
+                        logger: (m) => {
+                            if (m.status === 'recognizing text') {
+                                showStatus(`Procesando: ${Math.round(m.progress * 100)}%`, 'loading');
+                            }
+                        }
+                    });
+                    text = result.data.text;
+                }
+                
+                parseInvoiceData(text);
+                showStatus('Datos extraídos correctamente', 'success');
+            } catch (error) {
+                showStatus('Error al procesar la imagen: ' + error.message, 'error');
+            }
+        }
+        
+        async function extractFromRegions(imageData) {
+            const img = new Image();
+            img.src = imageData;
+            await new Promise(resolve => img.onload = resolve);
+            
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+            
+            let fullText = '';
+            
+            for (const [field, region] of Object.entries(regions)) {
+                const x = Math.round(region.x * img.width);
+                const y = Math.round(region.y * img.height);
+                const w = Math.round(region.width * img.width);
+                const h = Math.round(region.height * img.height);
+                
+                const regionCanvas = document.createElement('canvas');
+                regionCanvas.width = w;
+                regionCanvas.height = h;
+                const regionCtx = regionCanvas.getContext('2d');
+                regionCtx.drawImage(img, x, y, w, h, 0, 0, w, h);
+                
+                const regionDataUrl = regionCanvas.toDataURL('image/png');
+                
+                try {
+                    const result = await Tesseract.recognize(regionDataUrl, 'spa+eng');
+                    fullText += result.data.text + '\n';
+                } catch (e) {
+                    console.error('Error extracting region:', field, e);
+                }
+            }
+            
+            return fullText;
+        }
+        
+        function parseInvoiceData(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+            const fullText = text;
+            
+            const tipoComprobantePatterns = [
+                /(?:factura|tipo|comprobante)\s*[:\-]?\s*([A-Z])/i,
+                /\b(Factura\s+[A-Z])\b/i,
+                /\b([A-Z])\s*[-–]\s*\d{4,}/i
+            ];
+            
+            const puntoVentaPatterns = [
+                /punto\s*de\s*venta\s*[:\-]?\s*(\d{4,5})/i,
+                /pto\.?\s*vta\.?\s*[:\-]?\s*(\d{4,5})/i,
+                /(\d{4,5})[\s\-]?\/\s?(\d{5,8})/,
+                /(?:0000\d)[\s\-](\d{5,})/
+            ];
+            
+            const numeroComprobantePatterns = [
+                /(?:factura|nro|numero|no\.?)\s*[:\-]?\s*(\d{5,8})/i,
+                /(\d{4,5})[\s\-](\d{5,8})/,
+                /(?:\d{4,5})[\s\-](\d{5,8})/,
+                /\b(\d{8})\b/
+            ];
+            
+            const caePatterns = [
+                /CAE\s*[:\-]?\s*(\d{14})/i,
+                /C\.?A\.?E\.?\s*[:\-]?\s*(\d{14})/i,
+                /(\d{14})/
+            ];
+            
+            const datePatterns = [
+                /(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/,
+                /(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/,
+                /(\d{1,2})\s+de\s+\w+\s+de\s+(\d{4})/i,
+                /fecha\s*[:\-]?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/i
+            ];
+            
+            const totalPatterns = [
+                /total\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /grand\s*total\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /total\s*a\s*pag[ao]\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /importe\s*total\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i
+            ];
+            
+            const subtotalPatterns = [
+                /subtotal\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /sub\s*total\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /base\s*imponible\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /neto\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i
+            ];
+            
+            const ivaPatterns = [
+                /(?:iva|impuesto|vat)\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /21%\s*[:\-]?\s*([\d,]+\.?\d*)/i,
+                /19%\s*[:\-]?\s*([\d,]+\.?\d*)/i,
+                /10\.5%\s*[:\-]?\s*([\d,]+\.?\d*)/i,
+                /27%\s*[:\-]?\s*([\d,]+\.?\d*)/i
+            ];
+            
+            const iibbPatterns = [
+                /(?:iibb|ingresos\s*brutos|percepcion)\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i,
+                /i\.i\.b\.b\.\s*[:\-]?\s*[\$\€]?\s*([\d,]+\.?\d*)/i
+            ];
+            
+            const cuitPatterns = [
+                /CUIT\s*[:\-]?\s*(\d{2}[\-\.]?\d{7}[\-\.]?\d{1})/i,
+                /C\.?U\.?I\.?T\.?\s*[:\-]?\s*(\d{11})/i,
+                /(\d{2}[\-\.]\d{7}[\-\.]\d{1})/,
+                /(\d{11})/
+            ];
+            
+            const condicionIvaPatterns = [
+                /(?:condición|responsable)\s*iva\s*[:\-]?\s*([\w\s]+)/i,
+                /(?:responsable\s*)?inscripto/i,
+                /monotributista/i,
+                /consumidor\s*final/i,
+                /exento/i
+            ];
+            
+            const addressPatterns = [
+                /dirección\s*[:\-]?\s*(.+)/i,
+                /dir\.?\s*[:\-]?\s*(.+)/i,
+                /domicilio\s*[:\-]?\s*(.+)/i,
+                /address\s*[:\-]?\s*(.+)/i
+            ];
+            
+            for (const pattern of tipoComprobantePatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        const value = match[1].toUpperCase();
+                        if (/^[ABCEM]$/.test(value)) {
+                            document.getElementById('tipoComprobante').value = value;
+                            break;
+                        }
+                        const typeMatch = value.match(/FACTURA\s+([A-Z])/i);
+                        if (typeMatch) {
+                            document.getElementById('tipoComprobante').value = typeMatch[1].toUpperCase();
+                            break;
+                        }
+                    }
+                }
+                if (document.getElementById('tipoComprobante').value) break;
+            }
+            
+            for (const pattern of puntoVentaPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        document.getElementById('puntoVenta').value = match[1].padStart(4, '0');
+                        break;
+                    }
+                }
+                if (document.getElementById('puntoVenta').value) break;
+            }
+            
+            let puntoVentaValue = document.getElementById('puntoVenta').value;
+            for (const pattern of numeroComprobantePatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        const num = match[1];
+                        if (num.length >= 5) {
+                            if (puntoVentaValue) {
+                                document.getElementById('numeroComprobante').value = num;
+                            } else {
+                                document.getElementById('numeroComprobante').value = num;
+                            }
+                            break;
+                        }
+                    }
+                }
+                if (document.getElementById('numeroComprobante').value) break;
+            }
+            
+            for (const pattern of caePatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1] && match[1].length === 14) {
+                        document.getElementById('cae').value = match[1];
+                        break;
+                    }
+                }
+                if (document.getElementById('cae').value) break;
+            }
+            
+            for (const pattern of datePatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match) {
+                        let dateStr;
+                        if (match[0].includes('de')) {
+                            const months = {
+                                'enero': '01', 'febrero': '02', 'marzo': '03', 'abril': '04',
+                                'mayo': '05', 'junio': '06', 'julio': '07', 'agosto': '08',
+                                'septiembre': '09', 'octubre': '10', 'noviembre': '11', 'diciembre': '12'
+                            };
+                            const monthName = match[0].match(/(\w+)/)[1].toLowerCase();
+                            dateStr = `${match[2]}-${months[monthName]}-${match[1].padStart(2, '0')}`;
+                        } else if (match[1].length === 4) {
+                            dateStr = `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+                        } else {
+                            const year = match[3].length === 2 ? '20' + match[3] : match[3];
+                            dateStr = `${year}-${match[2].padStart(2, '0')}-${match[1].padStart(2, '0')}`;
+                        }
+                        if (!document.getElementById('fecha').value) {
+                            document.getElementById('fecha').value = dateStr;
+                        } else if (!document.getElementById('fechaVencimiento').value) {
+                            document.getElementById('fechaVencimiento').value = dateStr;
+                        }
+                        break;
+                    }
+                }
+            }
+            
+            const fechaValue = document.getElementById('fecha').value;
+            if (fechaValue && !document.getElementById('fechaVencimiento').value) {
+                const [year, month, day] = fechaValue.split('-');
+                const fecha = new Date(year, month - 1, day);
+                fecha.setDate(fecha.getDate() + 30);
+                const fechaVenc = `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}-${String(fecha.getDate()).padStart(2, '0')}`;
+                document.getElementById('fechaVencimiento').value = fechaVenc;
+            }
+            
+            for (const pattern of totalPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        const value = parseFloat(match[1].replace(/,/g, ''));
+                        if (value > 0) {
+                            document.getElementById('total').value = value.toFixed(2);
+                            break;
+                        }
+                    }
+                }
+                if (document.getElementById('total').value) break;
+            }
+            
+            for (const pattern of subtotalPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        document.getElementById('subtotal').value = parseFloat(match[1].replace(/,/g, '')).toFixed(2);
+                        break;
+                    }
+                }
+                if (document.getElementById('subtotal').value) break;
+            }
+            
+            for (const pattern of ivaPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        document.getElementById('iva').value = parseFloat(match[1].replace(/,/g, '')).toFixed(2);
+                        break;
+                    }
+                }
+                if (document.getElementById('iva').value) break;
+            }
+            
+            for (const pattern of iibbPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        document.getElementById('iibb').value = parseFloat(match[1].replace(/,/g, '')).toFixed(2);
+                        break;
+                    }
+                }
+                if (document.getElementById('iibb').value) break;
+            }
+            
+            let foundCuit = 0;
+            for (const pattern of cuitPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1]) {
+                        const cleanedCuit = match[1].replace(/[\-\.]/g, '');
+                        if (cleanedCuit.length === 11 && !isNaN(cleanedCuit)) {
+                            if (foundCuit === 0) {
+                                document.getElementById('cuitEmisor').value = formatCuit(cleanedCuit);
+                                foundCuit = 1;
+                            } else if (foundCuit === 1 && document.getElementById('cuitEmisor').value) {
+                                document.getElementById('cuitReceptor').value = formatCuit(cleanedCuit);
+                                foundCuit = 2;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (foundCuit === 2) break;
+            }
+            
+            for (const line of lines) {
+                const lowerLine = line.toLowerCase();
+                if (lowerLine.includes('responsable inscripto') || lowerLine.includes('ri')) {
+                    document.getElementById('condicionIva').value = 'Responsable Inscripto';
+                    break;
+                } else if (lowerLine.includes('monotributista') || lowerLine.includes('mt')) {
+                    document.getElementById('condicionIva').value = 'Monotributista';
+                    break;
+                } else if (lowerLine.includes('consumidor final') || lowerLine.includes('cf')) {
+                    document.getElementById('condicionIva').value = 'Consumidor Final';
+                    break;
+                } else if (lowerLine.includes('exento')) {
+                    document.getElementById('condicionIva').value = 'Exento';
+                    break;
+                }
+            }
+            
+            for (const pattern of addressPatterns) {
+                for (const line of lines) {
+                    const match = line.match(pattern);
+                    if (match && match[1] && match[1].length > 5) {
+                        document.getElementById('direccion').value = match[1].trim();
+                        break;
+                    }
+                }
+                if (document.getElementById('direccion').value) break;
+            }
+            
+            const ignoreWords = ['factura', 'fecha', 'total', 'subtotal', 'iva', 'nit', 'direccion', 'tel', 'telefono', 'email', 'www', 'cuit', 'iibb', 'cae', 'punto', 'venta', 'comprobante', 'importe'];
+            for (const line of lines.slice(0, 15)) {
+                const words = line.split(/\s+/);
+                if (words.length >= 2 && words.length <= 6) {
+                    const isLikelyName = words.every(w => w.length > 2 && !ignoreWords.some(ignored => w.toLowerCase().includes(ignored)));
+                    if (isLikelyName && !document.getElementById('proveedor').value) {
+                        document.getElementById('proveedor').value = line;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function formatCuit(cuit) {
+            if (cuit.length === 11) {
+                return `${cuit.slice(0, 2)}-${cuit.slice(2, 10)}-${cuit.slice(10)}`;
+            }
+            return cuit;
+        }
+        
+        function showStatus(message, type) {
+            status.className = 'status ' + type;
+            status.innerHTML = type === 'loading' ? `<span class="spinner"></span>${message}` : message;
+        }
+        
+        document.getElementById('sendBtn').addEventListener('click', async () => {
+            const renglones = [];
+            document.querySelectorAll('.renglon-card').forEach((renglon) => {
+                renglones.push({
+                    cantidad: parseFloat(renglon.querySelector('.renglon-cantidad').value) || 0,
+                    descripcion: renglon.querySelector('.renglon-descripcion').value,
+                    precioUnitario: parseFloat(renglon.querySelector('.renglon-precio').value) || 0,
+                    alicuotaIva: parseFloat(renglon.querySelector('.renglon-iva').value) || 0,
+                    importe: parseFloat(renglon.querySelector('.renglon-importe').value) || 0
+                });
+            });
+            
+            const data = {
+                tipoComprobante: document.getElementById('tipoComprobante').value,
+                puntoVenta: document.getElementById('puntoVenta').value,
+                numeroComprobante: document.getElementById('numeroComprobante').value,
+                cae: document.getElementById('cae').value,
+                fecha: document.getElementById('fecha').value,
+                fechaVencimiento: document.getElementById('fechaVencimiento').value,
+                proveedor: document.getElementById('proveedor').value,
+                cuitEmisor: document.getElementById('cuitEmisor').value,
+                cuitReceptor: document.getElementById('cuitReceptor').value,
+                condicionIva: document.getElementById('condicionIva').value,
+                direccion: document.getElementById('direccion').value,
+                subtotal: parseFloat(document.getElementById('subtotal').value) || 0,
+                iva: parseFloat(document.getElementById('iva').value) || 0,
+                iibb: parseFloat(document.getElementById('iibb').value) || 0,
+                total: parseFloat(document.getElementById('total').value) || 0,
+                renglones: renglones
+            };
+            
+            const btn = document.getElementById('sendBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>Enviando...';
+            
+            try {
+                const response = await fetch('URL_DE_TU_API_AQUI', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    showStatus('Datos enviados correctamente', 'success');
+                } else {
+                    showStatus('Error al enviar los datos', 'error');
+                }
+            } catch (error) {
+                showStatus('Error de conexión: ' + error.message, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Enviar Datos';
+            }
+        });
+    </script>
+</body>
+</html>
